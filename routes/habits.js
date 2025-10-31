@@ -56,6 +56,111 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /habits/categories
+ * Get all categories used by the authenticated user
+ */
+router.get('/categories', async (req, res) => {
+    try {
+        const categories = await habitService.getUserCategories(req.user.id);
+
+        res.json({
+            categories,
+            count: categories.length
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /habits/export
+ * Export user's habit data with detailed statistics
+ */
+router.get('/export', async (req, res) => {
+    try {
+        const { format = 'json', days = 30 } = req.query;
+
+        // Get habits with extended completion history
+        const habits = await habitService.getUserHabits(req.user.id, {
+            days: parseInt(days),
+            filter: { is_archived: false }
+        });
+
+        // Calculate detailed statistics
+        const stats = {
+            totalHabits: habits.length,
+            activeHabits: habits.filter(h => !h.is_archived).length,
+            archivedHabits: habits.filter(h => h.is_archived).length,
+            totalStreaks: habits.reduce((sum, h) => sum + (h.current_streak || 0), 0),
+            longestStreak: Math.max(...habits.map(h => h.longest_streak || 0), 0),
+            averageStreak: habits.length > 0 ?
+                Math.round(habits.reduce((sum, h) => sum + (h.current_streak || 0), 0) / habits.length) : 0,
+            categories: [...new Set(habits.map(h => h.category).filter(Boolean))],
+            completionRate: habits.length > 0 ?
+                Math.round((habits.reduce((sum, h) => {
+                    const recentCompletions = h.recent_completions || []
+                    const completedDays = recentCompletions.filter(c => c.completed).length
+                    return sum + completedDays
+                }, 0) / (habits.length * parseInt(days))) * 100) : 0
+        };
+
+        const exportData = {
+            exportDate: new Date().toISOString(),
+            userId: req.user.id,
+            period: `${days} days`,
+            statistics: stats,
+            habits: habits.map(habit => ({
+                id: habit.id,
+                title: habit.title,
+                description: habit.description,
+                category: habit.category,
+                currentStreak: habit.current_streak || 0,
+                longestStreak: habit.longest_streak || 0,
+                isArchived: habit.is_archived || false,
+                createdAt: habit.created_at,
+                recentCompletions: habit.recent_completions || []
+            }))
+        };
+
+        if (format === 'csv') {
+            // Convert to CSV format
+            const csvRows = [
+                ['Habit Title', 'Description', 'Category', 'Current Streak', 'Longest Streak', 'Created Date', 'Is Archived', 'Completion Rate (%)']
+            ];
+
+            habits.forEach(habit => {
+                const recentCompletions = habit.recent_completions || [];
+                const completionRate = recentCompletions.length > 0 ?
+                    Math.round((recentCompletions.filter(c => c.completed).length / recentCompletions.length) * 100) : 0;
+
+                csvRows.push([
+                    habit.title,
+                    habit.description || '',
+                    habit.category || '',
+                    habit.current_streak || 0,
+                    habit.longest_streak || 0,
+                    new Date(habit.created_at).toLocaleDateString(),
+                    habit.is_archived ? 'Yes' : 'No',
+                    completionRate
+                ]);
+            });
+
+            const csvContent = csvRows.map(row =>
+                row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(',')
+            ).join('\n');
+
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="inhabit-habits-${new Date().toISOString().split('T')[0]}.csv"`);
+            res.send(csvContent);
+        } else {
+            res.json(exportData);
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * POST /habits
  * Create a new habit
  */
@@ -210,23 +315,6 @@ router.post('/:id/streaks/recalculate', async (req, res) => {
         });
     } catch (error) {
         res.status(400).json({ error: error.message });
-    }
-});
-
-/**
- * GET /habits/categories
- * Get all categories used by the authenticated user
- */
-router.get('/categories', async (req, res) => {
-    try {
-        const categories = await habitService.getUserCategories(req.user.id);
-
-        res.json({
-            categories,
-            count: categories.length
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
     }
 });
 

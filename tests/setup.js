@@ -6,12 +6,12 @@ const mockUsers = new Map();
 const mockHabits = new Map();
 const mockCompletions = new Map();
 
-let userIdCounter = 1;
-let habitIdCounter = 1;
-let completionIdCounter = 1;
-
 // Mock Supabase for tests
 jest.mock('../config/database', () => {
+    let mockUserIdCounter = 1;
+    let mockHabitIdCounter = 1;
+    let mockCompletionIdCounter = 1;
+
     const mockSupabase = {
         from: jest.fn((table) => {
             const mockQuery = {
@@ -38,7 +38,7 @@ jest.mock('../config/database', () => {
 
                 mockQuery.insert.mockImplementation((userData) => {
                     const user = {
-                        id: `user-${userIdCounter++}`,
+                        id: `user-${mockUserIdCounter++}`,
                         ...userData,
                         created_at: new Date().toISOString()
                     };
@@ -61,7 +61,7 @@ jest.mock('../config/database', () => {
 
                 mockQuery.insert.mockImplementation((habitData) => {
                     const habit = {
-                        id: `habit-${habitIdCounter++}`,
+                        id: `habit-${mockHabitIdCounter++}`,
                         current_streak: 0,
                         longest_streak: 0,
                         ...habitData,
@@ -89,7 +89,7 @@ jest.mock('../config/database', () => {
             } else if (table === 'habit_completions') {
                 mockQuery.insert.mockImplementation((completionData) => {
                     const completion = {
-                        id: `completion-${completionIdCounter++}`,
+                        id: `completion-${mockCompletionIdCounter++}`,
                         ...completionData,
                         created_at: new Date().toISOString()
                     };
